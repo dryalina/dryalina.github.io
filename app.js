@@ -26,7 +26,7 @@ class SocialOS {
 
     async fetchData(url) {
         const r = await fetch(url);
-        if (!r.ok) throw new Error("File not found");
+        if (!r.ok) throw new Error(`Failed to load: ${url}`);
         return r.json();
     }
 
@@ -34,13 +34,16 @@ class SocialOS {
         this.nodes.profile.innerHTML = `
             <div class="banner" style="background-image: url('${info.banner}')"></div>
             <div class="profile-meta">
-                <img src="${info.avatar}" class="pfp" loading="lazy">
+                <img src="${info.avatar}" class="pfp" alt="${info.name}" loading="lazy">
                 <button class="follow-btn">Follow</button>
+                
                 <div class="info-group">
-                    <h1 style="font-size: 20px; margin: 10px 0 2px;">${info.name} <span style="color:var(--accent)">✔</span></h1>
-                    <p style="color:var(--dim); margin:0;">@${this.user}</p>
-                    <p class="post-body" style="margin: 12px 0;">${info.bio}</p>
-                    <div style="color:var(--dim); font-size:14px;">📍 ${info.location} · 🗓️ ${info.joined}</div>
+                    <h1>${info.name} <span style="color:var(--accent)">✔</span></h1>
+                    <p class="username">@${this.user}</p>
+                    <p class="post-body bio">${info.bio}</p>
+                    <div class="profile-details">
+                        📍 ${info.location} · 🗓️ ${info.joined}
+                    </div>
                 </div>
             </div>
         `;
@@ -48,59 +51,87 @@ class SocialOS {
 
     renderTimeline(posts) {
         this.nodes.feed.innerHTML = posts.map(post => `
-            <article class="post-card">
+            <article class="post-card" data-id="${post.id}">
                 <div class="post-main">
-                    <div class="post-meta"><strong>${this.user}</strong> · ${post.timestamp}</div>
+                    <div class="post-meta">
+                        <strong>${this.user}</strong>
+                        <span class="dot">·</span>
+                        <span>${post.timestamp}</span>
+                    </div>
                     <div class="post-body">${post.content}</div>
+
                     <div class="post-actions">
                         <button class="act-btn reply-btn" data-id="${post.id}">
-                            <span>💬</span> ${post.stats.replies}
+                            💬 <span class="count">${post.stats.replies}</span>
                         </button>
-                        <button class="act-btn share-btn"><span>🔁</span> ${post.stats.shares}</button>
-                        <button class="act-btn heart-btn"><span>❤️</span> ${post.stats.likes}</button>
+                        <button class="act-btn share-btn">
+                            🔁 <span class="count">${post.stats.shares}</span>
+                        </button>
+                        <button class="act-btn heart-btn">
+                            ❤️ <span class="count">${post.stats.likes}</span>
+                        </button>
                     </div>
                 </div>
+
+                <!-- Replies Section -->
                 <div class="replies-wrapper" id="replies-${post.id}" style="display: none;">
-                    ${this.renderReplies(post.replies)}
+                    ${this.renderReplies(post.replies || [])}
                 </div>
             </article>
         `).join('');
     }
 
     renderReplies(replies) {
-        if (!replies || replies.length === 0) return `<p style="padding:10px; color:var(--dim)">No conversations yet.</p>`;
-        return replies.map(r => `
+        if (!replies || replies.length === 0) {
+            return `<div class="no-replies">No replies yet. Be the first to reply!</div>`;
+        }
+
+        return replies.map(reply => `
             <div class="reply-item">
-                <div style="font-weight:700; font-size:13px;">@${r.user} <span style="color:var(--dim); font-weight:400;">· ${r.time}</span></div>
-                <div style="margin-top:4px;">${r.text}</div>
+                <div class="reply-header">
+                    <strong>@${reply.user}</strong>
+                    <span class="reply-time">· ${reply.time}</span>
+                </div>
+                <div class="reply-text">${reply.text}</div>
             </div>
         `).join('');
     }
 
     initInteractions() {
-        this.nodes.feed.onclick = (e) => {
+        this.nodes.feed.addEventListener('click', (e) => {
             const btn = e.target.closest('.act-btn');
             if (!btn) return;
 
-            // Heart/Like Animation
+            // Like button with heart animation
             if (btn.classList.contains('heart-btn')) {
                 btn.classList.toggle('active');
+                const countEl = btn.querySelector('.count');
+                if (countEl) {
+                    let count = parseInt(countEl.textContent) || 0;
+                    countEl.textContent = btn.classList.contains('active') ? count + 1 : count - 1;
+                }
                 return;
             }
 
-            // Reply Toggle with state
+            // Toggle replies
             if (btn.classList.contains('reply-btn')) {
-                const id = btn.dataset.id;
-                const container = document.getElementById(`replies-${id}`);
-                const isHidden = container.style.display === 'none';
+                const postId = btn.dataset.id;
+                const repliesContainer = document.getElementById(`replies-${postId}`);
+                if (!repliesContainer) return;
 
-                container.style.display = isHidden ? 'block' : 'none';
+                const isHidden = repliesContainer.style.display === 'none';
+                repliesContainer.style.display = isHidden ? 'block' : 'none';
+                
+                // Toggle active state on reply button
                 btn.classList.toggle('active', isHidden);
             }
-        };
+        });
     }
 }
 
-// Start Engine
-document.addEventListener('DOMContentLoaded', () => new SocialOS());
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    new SocialOS();
+});
+
 window.onhashchange = () => location.reload();

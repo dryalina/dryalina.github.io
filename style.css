@@ -251,3 +251,130 @@ body {
         font-size: 14px;
     }
 }
+
+/* ==================== REPLIES - Professional Look ==================== */
+
+.replies-wrapper {
+    background: var(--reply-bg, #fafafa);
+    margin: 8px 16px 16px 52px;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    animation: fadeSlide 0.3s ease forwards;
+    position: relative;
+}
+
+/* Connecting line */
+.replies-wrapper::before {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 0;
+    bottom: 24px;
+    width: 3px;
+    background: linear-gradient(var(--accent), #e5e7eb);
+    border-radius: 9999px;
+}
+
+.reply-item {
+    padding: 14px 12px;
+    margin-bottom: 8px;
+    border-radius: 12px;
+    transition: all 0.2s var(--ease);
+    position: relative;
+}
+
+.reply-item:last-child {
+    margin-bottom: 0;
+}
+
+.reply-item:hover {
+    background: rgba(212, 42, 91, 0.05);
+}
+
+.reply-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 14.5px;
+}
+
+.reply-header strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.reply-time {
+    color: var(--dim);
+    font-size: 13.5px;
+}
+
+.reply-text {
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text);
+    white-space: pre-wrap;
+}
+
+/* No replies message */
+.no-replies {
+    padding: 20px 10px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 14px;
+    font-style: italic;
+}
+
+@keyframes fadeSlide {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Better action buttons */
+.act-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 9999px;
+    font-size: 13.5px;
+    transition: all 0.25s var(--ease);
+}
+
+.act-btn:hover {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+
+.act-btn.active {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.heart-btn.active {
+    color: #e0245e;
+    animation: pop 0.3s ease;
+}
+
+@keyframes pop {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.4);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
