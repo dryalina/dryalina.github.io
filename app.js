@@ -13,14 +13,16 @@ class SocialOS {
             const info = await this.fetchData(`data/user/${this.user}/info.json`);
             this.renderProfile(info);
 
-            const year = info.years.at(-1);
-            const month = info.year_map[year].at(-1);
+            const year = info.years?.at(-1) || "2026";
+            const month = info.year_map?.[year]?.at(-1) || "april";
+
             const content = await this.fetchData(`data/user/${this.user}/posts/${year}/${month}/posts.json`);
 
             this.renderTimeline(content.posts);
             this.initInteractions();
         } catch (err) {
             console.error("System Mess:", err);
+            this.nodes.feed.innerHTML = `<p style="color: red; padding: 20px;">Failed to load posts. Please check the console.</p>`;
         }
     }
 
@@ -30,19 +32,42 @@ class SocialOS {
         return r.json();
     }
 
+    // Improved timeAgo function - more reliable parsing
+    timeAgo(fullTimeStr) {
+        // Parse "April 20, 2026 • 09:01 AM" format
+        const cleaned = fullTimeStr.replace('•', '').trim();
+        const date = new Date(cleaned);
+        
+        if (isNaN(date.getTime())) {
+            return "now"; // fallback
+        }
+
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins < 1) return "now";
+        if (diffMins < 60) return diffMins + "m";
+        
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return diffHours + "h";
+        
+        return Math.floor(diffHours / 24) + "d";
+    }
+
     renderProfile(info) {
         this.nodes.profile.innerHTML = `
-            <div class="banner" style="background-image: url('${info.banner}')"></div>
+            <div class="banner" style="background-image: url('${info.banner || 'default-banner.jpg'}')"></div>
             <div class="profile-meta">
-                <img src="${info.avatar}" class="pfp" alt="${info.name}" loading="lazy">
+                <img src="${info.avatar || 'default-avatar.jpg'}" class="pfp" alt="${info.name}" loading="lazy">
                 <button class="follow-btn">Follow</button>
                 
                 <div class="info-group">
-                    <h1>${info.name} <span style="color:var(--accent)">✔</span></h1>
-                    <p class="username">@${this.user}</p>
-                    <p class="post-body bio">${info.bio}</p>
+                    <h1>${info.name} ${info.verified ? '<span style="color:var(--accent)">✔</span>' : ''}</h1>
+                    <p class="username">@${info.handle || this.user}</p>
+                    <p class="post-body bio">${info.bio || ''}</p>
                     <div class="profile-details">
-                        📍 ${info.location} · 🗓️ ${info.joined}
+                        📍 ${info.location || ''} · 🗓️ ${info.joined || ''}
                     </div>
                 </div>
             </div>
@@ -50,15 +75,21 @@ class SocialOS {
     }
 
     renderTimeline(posts) {
+        if (!posts || posts.length === 0) {
+            this.nodes.feed.innerHTML = `<p>No posts yet.</p>`;
+            return;
+        }
+
         this.nodes.feed.innerHTML = posts.map(post => `
             <article class="post-card" data-id="${post.id}">
                 <div class="post-main">
                     <div class="post-meta">
-                        <strong>${this.user}</strong>
+                        <strong>${post.authorName || 'Yalina Zaidi'}</strong>
+                        <span class="username">@${this.user}</span>
                         <span class="dot">·</span>
-                        <span>${post.timestamp}</span>
+                        <span class="reply-time" title="${post.full_timestamp}">${this.timeAgo(post.full_timestamp)}</span>
                     </div>
-                    <div class="post-body">${post.content}</div>
+                    <div class="post-body">${this.escapeHtml(post.content)}</div>
 
                     <div class="post-actions">
                         <button class="act-btn reply-btn" data-id="${post.id}">
@@ -73,7 +104,6 @@ class SocialOS {
                     </div>
                 </div>
 
-                <!-- Replies Section -->
                 <div class="replies-wrapper" id="replies-${post.id}" style="display: none;">
                     ${this.renderReplies(post.replies || [])}
                 </div>
@@ -83,18 +113,31 @@ class SocialOS {
 
     renderReplies(replies) {
         if (!replies || replies.length === 0) {
-            return `<div class="no-replies">No replies yet. Be the first to reply!</div>`;
+            return `<div class="no-replies">No replies yet. Be the first!</div>`;
         }
 
         return replies.map(reply => `
             <div class="reply-item">
                 <div class="reply-header">
-                    <strong>@${reply.user}</strong>
-                    <span class="reply-time">· ${reply.time}</span>
+                    <strong>${reply.name}</strong>
+                    <span class="username">@${reply.user}</span>
+                    <span class="dot">·</span>
+                    <span class="reply-time" title="${reply.full_time}">${this.timeAgo(reply.full_time)}</span>
                 </div>
-                <div class="reply-text">${reply.text}</div>
+                ${reply.replying_to ? 
+                    `<div class="replying-to">Replying to @${reply.replying_to}</div>` : ''}
+                <div class="reply-text">${this.escapeHtml(reply.text)}</div>
             </div>
         `).join('');
+    }
+
+    escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     initInteractions() {
@@ -102,18 +145,16 @@ class SocialOS {
             const btn = e.target.closest('.act-btn');
             if (!btn) return;
 
-            // Like button with heart animation
             if (btn.classList.contains('heart-btn')) {
                 btn.classList.toggle('active');
                 const countEl = btn.querySelector('.count');
                 if (countEl) {
                     let count = parseInt(countEl.textContent) || 0;
-                    countEl.textContent = btn.classList.contains('active') ? count + 1 : count - 1;
+                    countEl.textContent = btn.classList.contains('active') ? count + 1 : Math.max(0, count - 1);
                 }
                 return;
             }
 
-            // Toggle replies
             if (btn.classList.contains('reply-btn')) {
                 const postId = btn.dataset.id;
                 const repliesContainer = document.getElementById(`replies-${postId}`);
@@ -121,15 +162,13 @@ class SocialOS {
 
                 const isHidden = repliesContainer.style.display === 'none';
                 repliesContainer.style.display = isHidden ? 'block' : 'none';
-                
-                // Toggle active state on reply button
                 btn.classList.toggle('active', isHidden);
             }
         });
     }
 }
 
-// Initialize
+// Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
     new SocialOS();
 });
