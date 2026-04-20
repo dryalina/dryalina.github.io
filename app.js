@@ -5,6 +5,7 @@ class SocialOS {
             feed: document.getElementById('feed-mount'),
             profile: document.getElementById('profile-mount')
         };
+        this.postsCache = new Map(); // To store posts with their replies
         this.init();
     }
 
@@ -16,9 +17,15 @@ class SocialOS {
             const year = info.years?.at(-1) || "2026";
             const month = info.year_map?.[year]?.at(-1) || "april";
 
-            const content = await this.fetchData(`data/user/${this.user}/posts/${year}/${month}/posts.json`);
+            const postsData = await this.fetchData(`data/user/${this.user}/posts/${year}/${month}/posts.json`);
 
-            this.renderTimeline(content.posts);
+            // Load comments and prepare posts
+            const postsWithComments = await this.loadCommentsForPosts(postsData.posts, year, month);
+
+            this.postsCache.clear();
+            postsWithComments.forEach(post => this.postsCache.set(post.id, post));
+
+            this.renderTimeline(postsWithComments);
             this.initInteractions();
         } catch (err) {
             console.error("System Mess:", err);
@@ -27,20 +34,54 @@ class SocialOS {
     }
 
     async fetchData(url) {
-        const r = await fetch(url);
-        if (!r.ok) throw new Error(`Failed to load: ${url}`);
-        return r.json();
+        try {
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
+            return await r.json();
+        } catch (err) {
+            console.error(`Fetch failed: ${url}`, err);
+            throw err;
+        }
     }
 
-    // Improved timeAgo function - more reliable parsing
+    // Improved comment loader with better path handling
+    async loadCommentsForPosts(posts, year, month) {
+        const basePath = `data/user/${this.user}/posts/${year}/${month}/`;
+
+        return await Promise.all(posts.map(async (post) => {
+            // Fix: Make sure each post has unique ID
+            if (!post.id) {
+                post.id = `post_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            }
+
+            if (post.commentsFile) {
+                try {
+                    // Support both "comments/comment_1.json" and just "comment_1.json"
+                    let commentUrl = post.commentsFile;
+                    if (!commentUrl.startsWith('http') && !commentUrl.includes('/')) {
+                        commentUrl = basePath + commentUrl;
+                    } else if (commentUrl.startsWith('comments/')) {
+                        commentUrl = basePath + commentUrl;
+                    }
+
+                    const commentsData = await this.fetchData(commentUrl);
+                    post.replies = Array.isArray(commentsData.replies) ? commentsData.replies : [];
+                } catch (err) {
+                    console.warn(`⚠️ Could not load comments for ${post.id} from ${post.commentsFile}`, err);
+                    post.replies = [];
+                }
+            } else {
+                post.replies = [];
+            }
+            return post;
+        }));
+    }
+
     timeAgo(fullTimeStr) {
-        // Parse "April 20, 2026 • 09:01 AM" format
+        if (!fullTimeStr) return "now";
         const cleaned = fullTimeStr.replace('•', '').trim();
         const date = new Date(cleaned);
-        
-        if (isNaN(date.getTime())) {
-            return "now"; // fallback
-        }
+        if (isNaN(date.getTime())) return "now";
 
         const now = new Date();
         const diffMs = now - date;
@@ -48,10 +89,8 @@ class SocialOS {
 
         if (diffMins < 1) return "now";
         if (diffMins < 60) return diffMins + "m";
-        
         const diffHours = Math.floor(diffMins / 60);
         if (diffHours < 24) return diffHours + "h";
-        
         return Math.floor(diffHours / 24) + "d";
     }
 
@@ -61,7 +100,6 @@ class SocialOS {
             <div class="profile-meta">
                 <img src="${info.avatar || 'default-avatar.jpg'}" class="pfp" alt="${info.name}" loading="lazy">
                 <button class="follow-btn">Follow</button>
-                
                 <div class="info-group">
                     <h1>${info.name} ${info.verified ? '<span style="color:var(--accent)">✔</span>' : ''}</h1>
                     <p class="username">@${info.handle || this.user}</p>
@@ -93,13 +131,13 @@ class SocialOS {
 
                     <div class="post-actions">
                         <button class="act-btn reply-btn" data-id="${post.id}">
-                            💬 <span class="count">${post.stats.replies}</span>
+                            💬 <span class="count">${post.stats?.replies || 0}</span>
                         </button>
                         <button class="act-btn share-btn">
-                            🔁 <span class="count">${post.stats.shares}</span>
+                            🔁 <span class="count">${post.stats?.shares || 0}</span>
                         </button>
                         <button class="act-btn heart-btn">
-                            ❤️ <span class="count">${post.stats.likes}</span>
+                            ❤️ <span class="count">${post.stats?.likes || 0}</span>
                         </button>
                     </div>
                 </div>
@@ -119,19 +157,20 @@ class SocialOS {
         return replies.map(reply => `
             <div class="reply-item">
                 <div class="reply-header">
-                    <strong>${reply.name}</strong>
-                    <span class="username">@${reply.user}</span>
+                    <strong>${this.escapeHtml(reply.name || '')}</strong>
+                    <span class="username">@${reply.user || ''}</span>
                     <span class="dot">·</span>
-                    <span class="reply-time" title="${reply.full_time}">${this.timeAgo(reply.full_time)}</span>
+                    <span class="reply-time" title="${reply.full_time || ''}">${this.timeAgo(reply.full_time)}</span>
                 </div>
                 ${reply.replying_to ? 
                     `<div class="replying-to">Replying to @${reply.replying_to}</div>` : ''}
-                <div class="reply-text">${this.escapeHtml(reply.text)}</div>
+                <div class="reply-text">${this.escapeHtml(reply.text || '')}</div>
             </div>
         `).join('');
     }
 
     escapeHtml(unsafe) {
+        if (!unsafe) return '';
         return unsafe
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
@@ -145,6 +184,7 @@ class SocialOS {
             const btn = e.target.closest('.act-btn');
             if (!btn) return;
 
+            // Like button
             if (btn.classList.contains('heart-btn')) {
                 btn.classList.toggle('active');
                 const countEl = btn.querySelector('.count');
@@ -155,10 +195,15 @@ class SocialOS {
                 return;
             }
 
+            // Reply button - toggle comments
             if (btn.classList.contains('reply-btn')) {
                 const postId = btn.dataset.id;
                 const repliesContainer = document.getElementById(`replies-${postId}`);
-                if (!repliesContainer) return;
+
+                if (!repliesContainer) {
+                    console.warn(`Replies container not found for post: ${postId}`);
+                    return;
+                }
 
                 const isHidden = repliesContainer.style.display === 'none';
                 repliesContainer.style.display = isHidden ? 'block' : 'none';
