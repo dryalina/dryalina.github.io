@@ -1,0 +1,18 @@
+{
+  "name": "Yalina",
+  "verified": true,
+  "handle": "yalina_dr",
+  "bio": "Medical Student at AIMC, Lahore. 🩺 Future physician dedicated to exploring the complexities of human anatomy and men's health. Passionate about clinical research and medical education. 🇵🇰✨",
+  "location": "Lahore, Pakistan",
+  "joined": "April 2026",
+  "avatar": "pics/yalina.jpg",
+  "banner": "pics/yalina_standing.jpg",
+  "years": [
+    "2026"
+  ],
+  "year_map": {
+    "2026": [
+      "april"
+    ]
+  }
+}
